@@ -1,0 +1,798 @@
+<title>LaTeX Ninja</title>
+
+    <!-- Core Libraries — cdnjs is the only script host the artifact CSP allows -->
+    <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/4.3.0/marked.min.js"></script>
+
+    <!-- MathJax (LaTeX → SVG, entirely local). 'tex-svg-full' bundles every TeX
+         extension INCLUDING color, so nothing is fetched at runtime — the artifact
+         sandbox blocks a library's own runtime fetches, which would silently break
+         \color if we loaded the extension on demand. -->
+    <script>
+        window.MathJax = {
+            tex: { packages: { "[+]": ["color", "ams", "noerrors", "newcommand"] } },
+            svg: { fontCache: "local", scale: 1.0 },
+            startup: { typeset: false }
+        };
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg-full.js"></script>
+
+    <!-- Typography: serif wordmark + monospace code -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --ink: #0a0a0b;
+            --ink-2: #121214;
+            --ink-3: #1a1a1d;
+            --line: #26262b;
+            --acid: #bef264;
+            --acid-dim: #a3e635;
+            --muted: #8a8a93;
+        }
+        /* Deliberately single-theme: this is a dark editor surface, so it paints its
+           own ground explicitly rather than inheriting the viewer's theme. */
+        html, body { height: 100%; }
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background: var(--ink);
+            color: #e7e7ea;
+            overflow: hidden;
+            margin: 0;
+        }
+        .font-serif-mark { font-family: 'Instrument Serif', Georgia, serif; }
+        .font-code { font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace; }
+
+        body::before {
+            content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 1; opacity: 0.025;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+        }
+        ::-webkit-scrollbar { width: 7px; height: 7px; }
+        ::-webkit-scrollbar-track { background: var(--ink); }
+        ::-webkit-scrollbar-thumb { background: #2e2e34; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #3d3d44; }
+
+        @keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+        .animate-float { animation: float 3s ease-in-out infinite; }
+
+        .typing-indicator span { animation: blink 1.4s infinite both; height: 6px; width: 6px; background-color: var(--acid); border-radius: 50%; display: inline-block; }
+        .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+        .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes blink { 0% { opacity: 0.2; transform: scale(0.8); } 20% { opacity: 1; transform: scale(1); } 100% { opacity: 0.2; transform: scale(0.8); } }
+
+        input[type=range] { accent-color: var(--acid); }
+        .swatch { width: 16px; height: 16px; border-radius: 50%; cursor: pointer; transition: transform .12s; border: 1px solid rgba(255,255,255,0.15); }
+        .swatch:hover { transform: scale(1.25); }
+
+        .msg-prose code { background: rgba(190,242,100,0.12); color: var(--acid); padding: 1px 5px; border-radius: 4px; font-family: 'JetBrains Mono', monospace; font-size: 0.85em; }
+        .msg-prose p { margin: 0; } .msg-prose p + p { margin-top: 0.5rem; }
+        .msg-prose ul { margin: 0.25rem 0; padding-left: 1.1rem; list-style: disc; }
+
+        /* ── Minimal reset (replaces Tailwind preflight) ── */
+        *,*::before,*::after{box-sizing:border-box;border-width:0;border-style:solid;border-color:currentColor;}
+        *{margin:0;}
+        h1{font-size:inherit;font-weight:inherit;}
+        button{background:none;cursor:pointer;font:inherit;color:inherit;line-height:inherit;}
+        button:disabled{cursor:default;}
+        input,textarea{font:inherit;color:inherit;background:none;}
+        textarea{resize:none;}
+        img,svg{display:block;}
+        img{max-width:100%;}
+
+        /* ── Static utilities (exact set used by the app) ── */
+        .flex{display:flex;} .flex-col{flex-direction:column;} .flex-wrap{flex-wrap:wrap;}
+        .flex-1{flex:1 1 0%;} .hidden{display:none;} .shrink-0{flex-shrink:0;}
+        .items-center{align-items:center;} .items-end{align-items:flex-end;} .items-start{align-items:flex-start;}
+        .justify-center{justify-content:center;} .justify-between{justify-content:space-between;} .justify-end{justify-content:flex-end;}
+
+        .relative{position:relative;} .absolute{position:absolute;}
+        .top-8{top:2rem;} .-top-\[88px\]{top:-88px;} .-bottom-5{bottom:-1.25rem;}
+        .left-4{left:1rem;} .right-4{right:1rem;} .left-1\/2{left:50%;}
+        .z-10{z-index:10;} .z-20{z-index:20;}
+
+        .h-screen{height:100vh;} .h-full{height:100%;} .h-1\/3{height:33.3333%;}
+        .h-1{height:0.25rem;} .h-4{height:1rem;} .h-9{height:2.25rem;} .h-\[72px\]{height:72px;}
+        .w-4{width:1rem;} .w-9{width:2.25rem;} .w-20{width:5rem;} .w-32{width:8rem;}
+        .w-fit{width:fit-content;} .w-\[360px\]{width:360px;}
+        .min-w-0{min-width:0;} .min-w-\[50px\]{min-width:50px;} .min-h-\[20px\]{min-height:20px;}
+        .max-w-full{max-width:100%;} .max-w-\[88\%\]{max-width:88%;}
+
+        .p-0\.5{padding:0.125rem;} .p-1{padding:0.25rem;} .p-2{padding:0.5rem;}
+        .p-2\.5{padding:0.625rem;} .p-4{padding:1rem;} .p-8{padding:2rem;}
+        .px-2{padding-left:0.5rem;padding-right:0.5rem;} .px-4{padding-left:1rem;padding-right:1rem;} .px-5{padding-left:1.25rem;padding-right:1.25rem;}
+        .py-0\.5{padding-top:0.125rem;padding-bottom:0.125rem;} .py-1{padding-top:0.25rem;padding-bottom:0.25rem;}
+        .py-2{padding-top:0.5rem;padding-bottom:0.5rem;} .py-2\.5{padding-top:0.625rem;padding-bottom:0.625rem;}
+        .py-3{padding-top:0.75rem;padding-bottom:0.75rem;} .py-4{padding-top:1rem;padding-bottom:1rem;} .py-5{padding-top:1.25rem;padding-bottom:1.25rem;}
+        .mb-2{margin-bottom:0.5rem;} .space-y-4>*+*{margin-top:1rem;}
+        .gap-0\.5{gap:0.125rem;} .gap-1{gap:0.25rem;} .gap-1\.5{gap:0.375rem;}
+        .gap-2{gap:0.5rem;} .gap-3{gap:0.75rem;} .gap-4{gap:1rem;} .gap-6{gap:1.5rem;}
+
+        .border{border-width:1px;} .border-b{border-bottom-width:1px;} .border-r{border-right-width:1px;} .border-t{border-top-width:1px;}
+        .rounded{border-radius:0.25rem;} .rounded-md{border-radius:0.375rem;} .rounded-lg{border-radius:0.5rem;}
+        .rounded-xl{border-radius:0.75rem;} .rounded-2xl{border-radius:1rem;} .rounded-full{border-radius:9999px;}
+        .rounded-br-sm{border-bottom-right-radius:0.125rem;} .rounded-bl-sm{border-bottom-left-radius:0.125rem;}
+
+        .text-xs{font-size:0.75rem;line-height:1rem;} .text-sm{font-size:0.875rem;line-height:1.25rem;}
+        .text-xl{font-size:1.25rem;line-height:1.75rem;} .text-2xl{font-size:1.5rem;line-height:2rem;}
+        .text-\[10px\]{font-size:10px;} .text-\[11px\]{font-size:11px;} .text-black{color:#000;}
+        .font-medium{font-weight:500;} .font-semibold{font-weight:600;} .font-bold{font-weight:700;}
+        .italic{font-style:italic;} .leading-none{line-height:1;} .leading-tight{line-height:1.25;} .leading-relaxed{line-height:1.625;}
+        .uppercase{text-transform:uppercase;} .tracking-tight{letter-spacing:-0.025em;} .tracking-\[0\.18em\]{letter-spacing:0.18em;}
+        .whitespace-nowrap{white-space:nowrap;}
+
+        .overflow-auto{overflow:auto;} .overflow-y-auto{overflow-y:auto;} .object-contain{object-fit:contain;}
+        .outline-none{outline:none;} .resize-none{resize:none;} .cursor-pointer{cursor:pointer;} .pointer-events-none{pointer-events:none;} .select-none{user-select:none;}
+        .opacity-0{opacity:0;} .opacity-40{opacity:0.4;} .opacity-\[0\.07\]{opacity:0.07;}
+        .shadow-lg{box-shadow:0 10px 15px -3px rgba(0,0,0,.1),0 4px 6px -4px rgba(0,0,0,.1);}
+        .shadow-2xl{box-shadow:0 25px 50px -12px rgba(0,0,0,.25);}
+
+        .-translate-x-1\/2{--tx:-50%;transform:translate(var(--tx,0),var(--ty,0));}
+        .translate-y-2{--ty:0.5rem;transform:translate(var(--tx,0),var(--ty,0));}
+        .scale-110{transform:scale(1.1);}
+
+        .transition-all{transition-property:all;transition-timing-function:cubic-bezier(.4,0,.2,1);transition-duration:.15s;}
+        .transition-colors{transition-property:color,background-color,border-color,fill,stroke;transition-timing-function:cubic-bezier(.4,0,.2,1);transition-duration:.15s;}
+        .transition-transform{transition-property:transform;transition-timing-function:cubic-bezier(.4,0,.2,1);transition-duration:.15s;}
+        .duration-200{transition-duration:.2s;} .duration-300{transition-duration:.3s;}
+
+        .hover\:bg-white\/10:hover{background-color:rgba(255,255,255,0.1);}
+        .hover\:underline:hover{text-decoration:underline;}
+        .active\:scale-90:active{transform:scale(0.9);}
+        .disabled\:opacity-40:disabled{opacity:0.4;}
+        .group:hover .group-hover\:opacity-100{opacity:1;}
+        .group:hover .group-hover\:translate-y-0{--ty:0;transform:translate(var(--tx,0),var(--ty,0));}
+    </style>
+<div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // Presentation-friendly palette. Names are valid xcolor names (MathJax supports them).
+        const PALETTE = [
+            ["#e23b3b", "red"], ["#f08a24", "orange"], ["#2fa84f", "green"],
+            ["#16a3a3", "teal"], ["#3b6fe2", "blue"], ["#9b3be2", "purple"],
+            ["#111111", "black"], ["#ffffff", "white"],
+        ];
+
+        /**
+         * AI Engine: Anthropic Messages API. Two modes:
+         *  - Inside a Claude.ai artifact: no key needed — the runtime injects auth.
+         *  - Standalone (opened as a plain HTML file / hosted): user supplies an API key
+         *    (stored in localStorage), sent with the CORS opt-in header.
+         */
+        const getApiKey = () => localStorage.getItem("latex-ninja-api-key") || "";
+
+        // Resolved once per load. null => not inside a Claude viewer (plain file / hosted).
+        let _samplePromise = null;
+        const getSample = () => {
+            if (!_samplePromise) {
+                _samplePromise = (window.claude && typeof window.claude.use === "function")
+                    ? Promise.resolve(window.claude.use("sample")).catch(() => null)
+                    : Promise.resolve(null);
+            }
+            return _samplePromise;
+        };
+
+        // Viewer-facing copy per documented sample error code. Never retry in a loop.
+        const SAMPLE_ERROR_COPY = {
+            not_granted: "Claude access wasn't allowed for this page. Reload and choose Allow to use the AI features.",
+            sampling_disabled: "Claude isn't available on this account.",
+            not_declared: "This page no longer has Claude access.",
+            capability_disabled: "Claude access isn't available in this view.",
+            capability_removed: "This viewer app is too old for that Claude feature — update it.",
+            images_unavailable: "This view can't send images. Type the expression instead.",
+            image_rejected: "That image was rejected. Try a smaller JPEG or PNG.",
+            rate_limited: "Too many requests just now. Wait a moment, then try again.",
+            session_expired: "Your Claude session expired. Sign in again and retry.",
+            refused: "Claude declined that request. Try rephrasing it.",
+            empty_completion: "Claude returned nothing. Try asking for less at once.",
+            prompt_too_large: "That's too much at once. Clear the chat and try again.",
+            invalid_request: "That request was malformed — please report this.",
+            upstream_error: "Connection hiccup reaching Claude. Try again.",
+            cancelled: "Stopped."
+        };
+
+        const anthropicChat = async (history, newMessage, currentLatex, image = null, onText = null, signal = null) => {
+            const imageDataUrl = image && image.url;
+            const systemPrompt = [
+                "You are LaTeX Ninja, an expert assistant that turns math and chemistry into clean LaTeX for the user's Honors Chemistry and Algebra 2 / Precalculus presentation documents.",
+                "The user's editor currently holds:",
+                "----------", currentLatex || "(empty)", "----------",
+                "PRIMARY JOB: the user will EITHER type a request OR paste a photo of handwritten GoodNotes notes. Transcribe it into accurate, clean LaTeX.",
+                "",
+                "PROTOCOL — follow exactly:",
+                "1. Whenever you produce or change LaTeX, output the COMPLETE new code wrapped in triple pipes:  ||| code here |||  — then a SHORT plain explanation OUTSIDE the pipes.",
+                "2. For an image, transcribe the math/chemistry exactly as written, fixing only obvious handwriting ambiguities. Return the LaTeX inside the triple pipes.",
+                "3. If the user is only chatting or asking 'what does this mean', reply normally with NO pipes.",
+                "4. Output ONLY the expression — no \\documentclass, no $ delimiters, no \\begin{document}.",
+                "",
+                "RENDERING RULES (output is rendered by MathJax to SVG, then rasterized to PNG):",
+                "- Use only standard LaTeX. Do NOT use \\ce, mhchem, \\require, or exotic packages.",
+                "- Chemistry: wrap element/species in \\text{} (e.g. \\text{H}_2\\text{O}, \\text{CO}_2). Reactions use \\rightarrow ; equilibrium uses \\rightleftharpoons ; states as \\text{(aq)}, \\text{(s)}, \\text{(l)}, \\text{(g)} ; charges as superscripts like ^{2+} or ^{-}.",
+                "- Math: standard academic notation (\\frac, \\sqrt, \\int, \\sum, \\lim, etc.).",
+                "- Color: when the user asks to highlight or color something, use the switch form {\\color{name} content} with xcolor names (red, blue, green, orange, purple, teal, black, white). Do NOT use \\textcolor — it does not render reliably in math mode.",
+                "- Keep it tidy and minimal so it renders crisply at high DPI."
+            ].join("\n");
+
+            // ── Path A: inside a Claude viewer. No API key, no network call of our own.
+            const sample = await getSample();
+            if (sample) {
+                // There is no system role here: standing instructions ride a leading
+                // user turn. Turns must start AND end on 'user'.
+                const turns = [{ role: "user", content: systemPrompt }];
+                for (const h of history.slice(-12)) {
+                    if (!h.text) continue;
+                    turns.push({ role: h.role === "user" ? "user" : "assistant", content: h.text });
+                }
+                turns.push({ role: "user", content: newMessage });
+
+                const opts = { cache: false, modelTier: "default" };
+                if (onText) opts.onText = onText;
+                if (signal) opts.signal = signal;
+                if (image && image.blob) {
+                    const limits = await sample.limits().catch(() => null);
+                    if (limits && limits.images) opts.images = image.blob;
+                }
+
+                try {
+                    const { text } = await sample(turns, opts);
+                    return text;
+                } catch (e) {
+                    const err = new Error(SAMPLE_ERROR_COPY[e && e.code] || "Couldn't reach Claude. Try again.");
+                    err.code = e && e.code;
+                    err.partial = e && e.text;
+                    throw err;
+                }
+            }
+
+            // ── Path B: standalone file — direct Anthropic API with the user's own key.
+            const messages = [];
+            let started = false;
+            for (const h of history) {
+                const role = h.role === "user" ? "user" : "assistant";
+                if (!started && role !== "user") continue;
+                started = true;
+                if (h.text) messages.push({ role, content: h.text });
+            }
+
+            const content = [];
+            if (imageDataUrl) {
+                const header = imageDataUrl.split(",")[0];
+                const m = header.match(/data:(.*?);/);
+                const mediaType = (m && m[1]) || "image/png";
+                content.push({ type: "image", source: { type: "base64", media_type: mediaType, data: imageDataUrl.split(",")[1] } });
+            }
+            content.push({ type: "text", text: newMessage });
+            messages.push({ role: "user", content });
+
+            const headers = { "Content-Type": "application/json", "anthropic-version": "2023-06-01" };
+            const apiKey = getApiKey();
+            if (apiKey) {
+                headers["x-api-key"] = apiKey;
+                headers["anthropic-dangerous-direct-browser-access"] = "true";
+            }
+            let response;
+            try {
+                response = await fetch("https://api.anthropic.com/v1/messages", {
+                    method: "POST",
+                    headers,
+                    body: JSON.stringify({
+                    model: "claude-opus-4-8",
+                    max_tokens: 8000,
+                    thinking: { type: "adaptive" },
+                    system: systemPrompt,
+                    messages
+                    })
+                });
+            } catch (networkErr) {
+                console.error("[Chat] fetch failed:", networkErr);
+                throw new Error(apiKey
+                    ? "Network error reaching api.anthropic.com — check your internet connection."
+                    : "Can't reach Claude from here. Key-free mode only works inside a Claude.ai artifact — running standalone, click the key button (top of the chat panel) and paste an Anthropic API key.");
+            }
+            if (!response.ok) {
+                let detail = "";
+                try { detail = (await response.json())?.error?.message || ""; } catch (_) {}
+                if (response.status === 401 && !apiKey) {
+                    throw new Error("No API access. Inside Claude.ai this works key-free; running standalone, click the key button to add an Anthropic API key.");
+                }
+                throw new Error("API error " + response.status + (detail ? ": " + detail : ""));
+            }
+            const data = await response.json();
+            return (data.content || []).filter(b => b.type === "text").map(b => b.text).join("\n").trim();
+        };
+
+        function App() {
+            const [latex, setLatex] = useState("\\text{CH}_4 + 2\\,\\text{O}_2 \\rightarrow \\text{CO}_2 + 2\\,\\text{H}_2\\text{O}");
+            const [chat, setChat] = useState([{ role: "model", text: "Ready. Paste a GoodNotes screenshot, upload a photo of your notes, or just type what you want typeset — math or chemistry." }]);
+            const [input, setInput] = useState("");
+            const [pendingImage, setPendingImage] = useState(null);
+            const [streamText, setStreamText] = useState("");
+            const [inViewer, setInViewer] = useState(false);
+            const abortRef = useRef(null);
+            const [loading, setLoading] = useState(false);
+            const EXPORT_DPI = 600; // always highest quality, always transparent
+            const [mathjaxReady, setMathjaxReady] = useState(false);
+            const [status, setStatus] = useState("Ready");
+            const [hasApiKey, setHasApiKey] = useState(!!getApiKey());
+
+            const configureApiKey = () => {
+                const current = getApiKey();
+                const entered = window.prompt(
+                    current
+                        ? "An API key is saved. Edit it, or clear the field to remove it (key-free mode inside Claude.ai)."
+                        : "Paste an Anthropic API key (sk-ant-…). Only needed when running outside Claude.ai — inside Claude, leave empty.",
+                    current
+                );
+                if (entered === null) return; // cancelled
+                const trimmed = entered.trim();
+                if (trimmed) {
+                    localStorage.setItem("latex-ninja-api-key", trimmed);
+                    setHasApiKey(true);
+                    setStatus("API key saved ✓");
+                } else {
+                    localStorage.removeItem("latex-ninja-api-key");
+                    setHasApiKey(false);
+                    setStatus("API key removed");
+                }
+                setTimeout(() => setStatus("Ready"), 2000);
+            };
+
+            const chatEndRef = useRef(null);
+            const fileInputRef = useRef(null);
+            const textAreaRef = useRef(null);
+            const previewRef = useRef(null);
+
+            useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chat, loading, streamText]);
+
+            // Inside a Claude viewer Claude is reachable without a key, so the
+            // key affordance is hidden there. Resolves ~10s at worst; never blocks paint.
+            useEffect(() => {
+                let live = true;
+                getSample().then(s => { if (live) setInViewer(!!s); });
+                return () => { live = false; };
+            }, []);
+
+            // Wait for MathJax to finish booting
+            useEffect(() => {
+                let cancelled = false;
+                const tryReady = () => {
+                    if (window.MathJax && window.MathJax.tex2svg) {
+                        if (!cancelled) setMathjaxReady(true);
+                        return true;
+                    }
+                    return false;
+                };
+                if (tryReady()) return;
+                const id = setInterval(() => { if (tryReady()) clearInterval(id); }, 100);
+                return () => { cancelled = true; clearInterval(id); };
+            }, []);
+
+            // Live preview — render LaTeX → SVG locally on every change
+            useEffect(() => {
+                if (!mathjaxReady || !previewRef.current) return;
+                const host = previewRef.current;
+                try {
+                    const wrapper = window.MathJax.tex2svg(latex, { display: true });
+                    const svg = wrapper.querySelector("svg");
+                    host.innerHTML = "";
+                    if (svg) {
+                        svg.style.maxWidth = "100%";
+                        svg.style.height = "auto";
+                        svg.style.fontSize = "48px";
+                        host.appendChild(svg);
+                    }
+                } catch (e) {
+                    host.innerHTML = '<div style="color:#e23b3b;font-family:JetBrains Mono,monospace;font-size:13px;padding:8px">LaTeX error: ' + (e.message || e) + '</div>';
+                }
+            }, [latex, mathjaxReady]);
+
+            useEffect(() => {
+                const handlePaste = (e) => {
+                    const items = e.clipboardData?.items || [];
+                    for (let item of items) {
+                        if (item.type.indexOf("image") !== -1) {
+                            e.preventDefault();
+                            // Keep the Blob itself: the Claude runtime takes Blobs,
+                            // and the data URL is only for the on-screen thumbnail.
+                            const file = item.getAsFile();
+                            const reader = new FileReader();
+                            reader.onload = (ev) => { setPendingImage({ url: ev.target.result, blob: file }); setStatus("Image staged"); };
+                            reader.readAsDataURL(file);
+                            return;
+                        }
+                    }
+                };
+                window.addEventListener("paste", handlePaste);
+                return () => window.removeEventListener("paste", handlePaste);
+            }, []);
+
+            const handleFileUpload = (e) => {
+                const file = e.target.files[0]; if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (ev) => { setPendingImage({ url: ev.target.result, blob: file }); setStatus("Image staged"); };
+                reader.readAsDataURL(file); e.target.value = "";
+            };
+
+            const handleSend = async () => {
+                if ((!input.trim() && !pendingImage) || loading) return;
+                const msgText = input.trim() || (pendingImage ? "Convert this image to LaTeX code." : "");
+                const imgToSend = pendingImage;
+                setInput(""); setPendingImage(null);
+                setChat(prev => [...prev, { role: "user", text: msgText, image: imgToSend ? imgToSend.url : null }]);
+                setLoading(true);
+                setStreamText("");
+                setStatus(imgToSend ? "Reading image…" : "Thinking…");
+
+                const ctl = new AbortController();
+                abortRef.current = ctl;
+                try {
+                    const responseText = await anthropicChat(
+                        chat, msgText, latex, imgToSend,
+                        ({ text }) => setStreamText(text),   // whole answer so far — assign, never +=
+                        ctl.signal
+                    );
+                    const codeMatch = responseText.match(/\|\|\|([\s\S]*?)\|\|\|/);
+                    let finalMsg = responseText;
+                    if (codeMatch) {
+                        setLatex(codeMatch[1].trim());
+                        finalMsg = responseText.replace(/\|\|\|[\s\S]*?\|\|\|/, "").trim();
+                        if (!finalMsg) finalMsg = "Updated the editor. ✶";
+                    }
+                    setChat(prev => [...prev, { role: "model", text: finalMsg }]);
+                    setStatus("Ready");
+                } catch (err) {
+                    console.error(err);
+                    if (err && err.code === "cancelled") {
+                        setStatus("Stopped");
+                    } else {
+                        const msg = (err && err.message) ? err.message : "Connection error — please try again.";
+                        setChat(prev => [...prev, { role: "model", text: msg }]);
+                        setStatus("Error");
+                    }
+                    setTimeout(() => setStatus("Ready"), 3000);
+                } finally {
+                    setLoading(false);
+                    setStreamText("");
+                    abortRef.current = null;
+                }
+            };
+
+            const insertWrapper = (cmd) => {
+                const ta = textAreaRef.current; if (!ta) return;
+                const { selectionStart: s, selectionEnd: e, value: t } = ta;
+                const sel = t.substring(s, e);
+                setLatex(t.substring(0, s) + "\\" + cmd + "{" + (sel || "text") + "}" + t.substring(e));
+                setTimeout(() => ta.focus(), 10);
+            };
+
+            // Color selected text, or the whole formula if nothing is selected.
+            // Uses {\color{name} ...} switch form — survives CodeCogs math-mode parsing
+            // more reliably than \textcolor{name}{...}.
+            const applyColor = (color) => {
+                const ta = textAreaRef.current; if (!ta) return;
+                const { selectionStart: s, selectionEnd: e, value: t } = ta;
+                if (s !== e) {
+                    const sel = t.substring(s, e);
+                    setLatex(t.substring(0, s) + "{\\color{" + color + "} " + sel + "}" + t.substring(e));
+                } else {
+                    setLatex("{\\color{" + color + "} " + t + "}");
+                }
+                setTimeout(() => ta.focus(), 10);
+            };
+
+            // Walk every <use href="#id"> and replace it with a clone of the referenced element.
+            // MathJax's SVG references glyph paths internally — when the SVG is loaded standalone
+            // these refs sometimes silently fail to resolve, producing a blank rasterization.
+            // Inlining them makes the SVG fully self-contained.
+            const inlineSvgUses = (svg) => {
+                for (let pass = 0; pass < 8; pass++) {
+                    const uses = Array.from(svg.querySelectorAll("use"));
+                    if (uses.length === 0) break;
+
+                    const lookup = {};
+                    svg.querySelectorAll("[id]").forEach(el => { lookup[el.id] = el; });
+
+                    let replaced = 0;
+                    for (const use of uses) {
+                        const href =
+                            use.getAttribute("href") ||
+                            use.getAttributeNS("http://www.w3.org/1999/xlink", "href") ||
+                            use.getAttribute("xlink:href");
+                        if (!href || !href.startsWith("#")) continue;
+                        const target = lookup[href.slice(1)];
+                        if (!target) continue;
+
+                        const clone = target.cloneNode(true);
+                        clone.removeAttribute("id");
+
+                        // Compose translate(x,y) with any existing transforms
+                        const x = parseFloat(use.getAttribute("x")) || 0;
+                        const y = parseFloat(use.getAttribute("y")) || 0;
+                        const useTransform = use.getAttribute("transform") || "";
+                        const cloneTransform = clone.getAttribute("transform") || "";
+                        const parts = [];
+                        if (x || y) parts.push(`translate(${x},${y})`);
+                        if (useTransform) parts.push(useTransform);
+                        if (cloneTransform) parts.push(cloneTransform);
+                        if (parts.length) clone.setAttribute("transform", parts.join(" "));
+
+                        use.parentNode.replaceChild(clone, use);
+                        replaced++;
+                    }
+                    if (replaced === 0) break;
+                }
+                // <defs> is now redundant
+                svg.querySelectorAll("defs").forEach(d => d.remove());
+            };
+
+            // Render the current LaTeX to a freshly-sized SVG and rasterize it to a PNG blob.
+            // Pure local — no external services, no CORS, no sandbox surprises.
+            const rasterizeToPng = async (dpi) => {
+                if (!window.MathJax || !window.MathJax.tex2svg) throw new Error("MathJax not ready");
+                const wrapper = window.MathJax.tex2svg(latex, { display: true });
+                const svg = wrapper.querySelector("svg");
+                if (!svg) throw new Error("MathJax returned no SVG");
+
+                // Explicit namespaces — required for standalone SVG documents loaded via <img>.
+                svg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+                svg.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
+
+                // Inline glyph references BEFORE resizing so the cloned paths inherit nothing weird.
+                inlineSvgUses(svg);
+
+                // MathJax sizes SVGs in 'ex' units. Convert to pixels with a generous scale.
+                const widthEx = parseFloat(svg.getAttribute("width")) || 10;
+                const heightEx = parseFloat(svg.getAttribute("height")) || 3;
+                const pxPerEx = (dpi / 100) * 8;
+                const pxW = Math.max(50, Math.round(widthEx * pxPerEx));
+                const pxH = Math.max(20, Math.round(heightEx * pxPerEx));
+                svg.setAttribute("width", pxW);
+                svg.setAttribute("height", pxH);
+                svg.style.width = pxW + "px";
+                svg.style.height = pxH + "px";
+                svg.setAttribute("color", "#000");
+
+                const svgStr = new XMLSerializer().serializeToString(svg);
+                console.log("[Copy] SVG", pxW + "×" + pxH, svgStr.length + "B,", svg.querySelectorAll("use").length, "remaining <use>");
+
+                const svgUrl = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgStr);
+
+                const img = await new Promise((resolve, reject) => {
+                    const i = new Image();
+                    i.onload = () => resolve(i);
+                    i.onerror = () => {
+                        console.error("[Copy] image load failed. SVG head:", svgStr.substring(0, 300));
+                        reject(new Error("SVG → Image failed"));
+                    };
+                    i.src = svgUrl;
+                });
+
+                // Use the image's actual rasterized dimensions when the browser computed them differently.
+                const cW = img.naturalWidth || pxW;
+                const cH = img.naturalHeight || pxH;
+                console.log("[Copy] img natural:", cW + "×" + cH);
+
+                const canvas = document.createElement("canvas");
+                canvas.width = cW;
+                canvas.height = cH;
+                const ctx = canvas.getContext("2d");
+                // Always transparent — no background fill.
+                ctx.drawImage(img, 0, 0, cW, cH);
+
+                const blob = await new Promise((resolve, reject) => {
+                    canvas.toBlob(b => b ? resolve(b) : reject(new Error("toBlob null")), "image/png");
+                });
+                console.log("[Copy] blob:", blob.size, "bytes");
+                if (blob.size < 200) console.warn("[Copy] blob suspiciously small — output may be blank");
+                return blob;
+            };
+
+            const renderBlob = async () => {
+                setStatus("Rendering…");
+                try {
+                    return await rasterizeToPng(EXPORT_DPI);
+                } catch (e) {
+                    console.error("[Export] rasterize failed:", e);
+                    setStatus("Render failed");
+                    setTimeout(() => setStatus("Ready"), 2200);
+                    return null;
+                }
+            };
+
+            // Inside a Claude viewer an <a download> is inert — the runtime's
+            // downloads capability is the only way to hand the viewer a file.
+            // Returns a short status string for the header.
+            const triggerDownload = async (blob) => {
+                const downloads = (window.claude && typeof window.claude.use === "function")
+                    ? await Promise.resolve(window.claude.use("downloads")).catch(() => null)
+                    : null;
+
+                if (downloads) {
+                    try {
+                        await downloads.save({ filename: "equation.png", data: blob });
+                        return "Saved transparent PNG ↓";
+                    } catch (e) {
+                        if (e && e.code === "cancelled") return "Save cancelled";
+                        console.error("[Export] downloads.save failed:", e);
+                        return "Save failed — try Copy PNG";
+                    }
+                }
+
+                const dlUrl = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = dlUrl; a.download = "equation.png";
+                document.body.appendChild(a); a.click(); a.remove();
+                URL.revokeObjectURL(dlUrl);
+                return "Downloaded transparent PNG ↓";
+            };
+
+            // NOTE: the browser clipboard flattens PNG alpha on most platforms —
+            // paste targets receive a white-background bitmap. Download preserves alpha.
+            const copyImage = async () => {
+                const blob = await renderBlob(); if (!blob) return;
+                try {
+                    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+                    setStatus("Copied ✓ — paste loses transparency? Use Download");
+                    setTimeout(() => setStatus("Ready"), 2600);
+                } catch (e) {
+                    console.warn("[Copy] clipboard.write failed, saving instead:", e.message);
+                    setStatus(await triggerDownload(blob));
+                    setTimeout(() => setStatus("Ready"), 2600);
+                }
+            };
+
+            const downloadImage = async () => {
+                const blob = await renderBlob(); if (!blob) return;
+                setStatus(await triggerDownload(blob));
+                setTimeout(() => setStatus("Ready"), 2600);
+            };
+
+            const Icon = ({ d, fill = "none" }) => (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill={fill} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" dangerouslySetInnerHTML={{ __html: d }} />
+            );
+
+            return (
+                <div className="flex h-full relative z-10" style={{ background: "var(--ink)" }}>
+
+                    {/* Left: Chat */}
+                    <div className="w-[360px] flex flex-col border-r" style={{ borderColor: "var(--line)", background: "var(--ink-2)" }}>
+                        <div className="px-5 py-4 border-b flex items-center gap-3" style={{ borderColor: "var(--line)" }}>
+                            <div className="w-9 h-9 rounded-lg flex items-center justify-center text-black shrink-0" style={{ background: "var(--acid)", boxShadow: "0 0 22px rgba(190,242,100,0.35)" }}>
+                                <span className="font-serif-mark text-xl leading-none">∑</span>
+                            </div>
+                            <div className="leading-tight flex-1 min-w-0">
+                                <h1 className="font-serif-mark italic text-2xl tracking-tight">LaTeX&nbsp;Ninja</h1>
+                                <p className="text-[10px] uppercase font-semibold tracking-[0.18em]" style={{ color: "var(--acid-dim)" }}>{status}</p>
+                            </div>
+                            {!inViewer && (
+                                <button onClick={configureApiKey} title={hasApiKey ? "API key saved — click to change or remove" : "Add an Anthropic API key (only needed outside Claude)"}
+                                        className="p-2 rounded-lg hover:bg-white/10 transition-colors shrink-0" style={{ color: hasApiKey ? "var(--acid)" : "var(--muted)" }}>
+                                    <Icon d='<path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>' />
+                                </button>
+                            )}
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto px-4 py-5 space-y-4">
+                            {chat.map((msg, i) => (
+                                <div key={i} className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}>
+                                    {msg.image && (<img src={msg.image} alt="Sent for transcription" className="w-32 rounded-lg border mb-2 shadow-lg" style={{ borderColor: "var(--line)" }} />)}
+                                    {msg.text && (
+                                        <div className={`msg-prose max-w-[88%] px-4 py-2.5 text-sm leading-relaxed rounded-2xl ${msg.role === "user" ? "rounded-br-sm text-black" : "rounded-bl-sm border"}`}
+                                             style={msg.role === "user" ? { background: "var(--acid)", fontWeight: 500 } : { background: "var(--ink-3)", borderColor: "var(--line)", color: "#cdcdd3" }}>
+                                            <div dangerouslySetInnerHTML={{ __html: marked.parse(msg.text) }} />
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                            {loading && (
+                                <div className="flex flex-col items-start gap-2">
+                                    {streamText ? (
+                                        <div className="msg-prose max-w-[88%] px-4 py-2.5 text-sm leading-relaxed rounded-2xl rounded-bl-sm border"
+                                             style={{ background: "var(--ink-3)", borderColor: "var(--line)", color: "#cdcdd3" }}>
+                                            {streamText}
+                                        </div>
+                                    ) : (
+                                        <div className="flex items-center gap-1.5 px-4 py-3 rounded-full w-fit border typing-indicator" style={{ background: "var(--ink-3)", borderColor: "var(--line)" }}>
+                                            <span></span><span></span><span></span>
+                                        </div>
+                                    )}
+                                    <button onClick={() => abortRef.current?.abort()}
+                                            className="text-[11px] px-2.5 py-1 rounded-full border hover:bg-white/10 transition-colors"
+                                            style={{ borderColor: "var(--line)", color: "var(--muted)" }}>Stop</button>
+                                </div>
+                            )}
+                            <div ref={chatEndRef} />
+                        </div>
+
+                        <div className="p-4 border-t relative" style={{ borderColor: "var(--line)", background: "var(--ink-2)" }}>
+                            {pendingImage && (
+                                <div className="absolute -top-[88px] left-4 right-4 h-[72px] rounded-xl border flex items-center p-2 gap-3 animate-float shadow-2xl z-20" style={{ background: "var(--ink-3)", borderColor: "var(--acid-dim)" }}>
+                                    <img src={pendingImage.url} alt="Staged for transcription" className="h-full rounded border" style={{ borderColor: "var(--line)" }} />
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-xs font-semibold" style={{ color: "var(--acid)" }}>Image staged</p>
+                                        <p className="text-[10px]" style={{ color: "var(--muted)" }}>Send to transcribe → LaTeX</p>
+                                    </div>
+                                    <button onClick={() => setPendingImage(null)} className="p-1 rounded hover:bg-white/10" style={{ color: "var(--muted)" }}>
+                                        <Icon d='<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>' />
+                                    </button>
+                                </div>
+                            )}
+                            <div className="flex gap-2 items-center">
+                                <button onClick={() => fileInputRef.current.click()} title="Upload image" className="p-2.5 rounded-full transition-colors shrink-0"
+                                        style={pendingImage ? { background: "rgba(190,242,100,0.15)", color: "var(--acid)" } : { background: "var(--ink-3)", color: "var(--muted)" }}>
+                                    <Icon d='<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>' />
+                                </button>
+                                <input type="file" id="ln-file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileUpload} />
+                                <input id="ln-chat-input" aria-label="Message LaTeX Ninja" className="flex-1 rounded-full px-4 py-2.5 text-sm outline-none transition-all" style={{ background: "var(--ink-3)", border: "1px solid var(--line)" }}
+                                       onFocus={e => e.target.style.borderColor = "var(--acid-dim)"} onBlur={e => e.target.style.borderColor = "var(--line)"}
+                                       placeholder={pendingImage ? "Add instructions (optional)…" : "Ask, or paste an image…"}
+                                       value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSend()} />
+                                <button onClick={handleSend} disabled={(!input.trim() && !pendingImage) || loading} className="p-2.5 rounded-full text-black disabled:opacity-40 transition-transform active:scale-90 shrink-0" style={{ background: "var(--acid)" }}>
+                                    <Icon d='<line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>' />
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Right: Editor + Preview */}
+                    <div className="flex-1 flex flex-col min-w-0" style={{ background: "var(--ink)" }}>
+
+                        {/* Editor */}
+                        <div className="h-1/3 flex flex-col border-b" style={{ borderColor: "var(--line)" }}>
+                            <div className="flex justify-between items-center px-4 py-2.5 border-b gap-3" style={{ background: "var(--ink-2)", borderColor: "var(--line)" }}>
+                                <div className="flex items-center gap-3 flex-wrap">
+                                    <span className="text-[11px] font-bold uppercase tracking-[0.18em]" style={{ color: "var(--muted)" }}>Source</span>
+                                    <div className="flex items-center gap-1 p-0.5 rounded-md border" style={{ background: "var(--ink-3)", borderColor: "var(--line)" }}>
+                                        <button onMouseDown={e => e.preventDefault()} onClick={() => insertWrapper("textbf")} title="Bold" className="px-2 py-0.5 rounded hover:bg-white/10 text-xs font-bold">B</button>
+                                        <button onMouseDown={e => e.preventDefault()} onClick={() => insertWrapper("textit")} title="Italic" className="px-2 py-0.5 rounded hover:bg-white/10 text-xs italic font-serif-mark">I</button>
+                                    </div>
+                                    {/* Color swatches: selection → color part, else color whole formula */}
+                                    <div className="flex items-center gap-1.5 px-2 py-1 rounded-md border" style={{ background: "var(--ink-3)", borderColor: "var(--line)" }} title="Color selected text — or the whole formula if nothing is selected">
+                                        {PALETTE.map(([hex, name]) => (
+                                            <span key={name} className="swatch" style={{ background: hex }} title={name} onMouseDown={e => e.preventDefault()} onClick={() => applyColor(name)} />
+                                        ))}
+                                    </div>
+                                </div>
+                                <button onClick={() => { navigator.clipboard.writeText(latex); setStatus("Source copied ✓"); setTimeout(() => setStatus("Ready"), 1500); }} className="text-xs font-medium hover:underline shrink-0" style={{ color: "var(--acid-dim)" }}>Copy source</button>
+                            </div>
+                            <textarea id="ln-source" aria-label="LaTeX source" ref={textAreaRef} value={latex} onChange={e => setLatex(e.target.value)} spellCheck="false" className="flex-1 p-4 font-code text-sm resize-none outline-none" style={{ background: "var(--ink)", color: "#d4d4d8" }} />
+                        </div>
+
+                        {/* Preview */}
+                        <div className="flex-1 flex flex-col">
+                            <div className="flex justify-between items-center px-4 py-2.5 border-b gap-3" style={{ background: "var(--ink-2)", borderColor: "var(--line)" }}>
+                                <span className="text-[11px] font-bold uppercase tracking-[0.18em]" style={{ color: "var(--acid-dim)" }}>Output</span>
+                                <span className="text-[10px] uppercase tracking-[0.18em] font-semibold" style={{ color: "var(--muted)" }}>Transparent · 600 DPI</span>
+                            </div>
+
+                            <div className="flex-1 relative flex flex-col items-center justify-center overflow-auto p-8 gap-6" style={{ backgroundImage: "radial-gradient(var(--line) 1px, transparent 1px)", backgroundSize: "22px 22px" }}>
+                                <div className="relative p-8 rounded-xl shadow-2xl border transition-all duration-300 group" style={{ background: "repeating-conic-gradient(#cbd5e1 0% 25%, #f1f5f9 0% 50%) 50% / 22px 22px", borderColor: "rgba(255,255,255,0.08)", color: "#000", minWidth: "120px", minHeight: "60px" }}>
+                                    <div ref={previewRef} style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "40px" }}>
+                                        {!mathjaxReady && <span style={{ color: "var(--muted)", fontSize: "12px" }}>Loading typesetter…</span>}
+                                    </div>
+                                    <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 translate-y-2 opacity-0 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-200 flex items-center gap-2">
+                                        <button onClick={copyImage} className="text-black px-5 py-2 rounded-full font-semibold text-sm flex items-center gap-2 whitespace-nowrap" style={{ background: "var(--acid)", boxShadow: "0 8px 24px rgba(190,242,100,0.35)" }}>
+                                            <Icon d='<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>' />
+                                            Copy PNG
+                                        </button>
+                                        <button onClick={downloadImage} title="Downloading always keeps transparency — the clipboard often flattens it to white" className="px-5 py-2 rounded-full font-semibold text-sm flex items-center gap-2 whitespace-nowrap border" style={{ background: "var(--ink-2)", borderColor: "var(--acid-dim)", color: "var(--acid)", boxShadow: "0 8px 24px rgba(0,0,0,0.45)" }}>
+                                            <Icon d='<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>' />
+                                            Download PNG
+                                        </button>
+                                    </div>
+                                </div>
+                                <p className="text-xs" style={{ color: "var(--muted)", textAlign: "center", maxWidth: "560px" }}>Press <b style={{ color: "#d4d4d8" }}>Ctrl/Cmd&nbsp;+&nbsp;V</b> anywhere to drop an image into the chat. Exports are always transparent at 600&nbsp;DPI — use <b style={{ color: "#d4d4d8" }}>Download PNG</b> to keep transparency (copy-paste often flattens it to white). For dark slides, click the white swatch.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+    </script>
